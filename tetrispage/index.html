@@ -7,20 +7,77 @@
     <title>Document</title>
   </head>
   <body>
-    <button onclick="send()">Send request</button>
+    <div id="console"></div>
+    <section>
+      <select id="game-room"></select>
+      <button onclick="refresh()">Refresh</button>
+      <button onclick="newgame()">New Game</button>
+      <button onclick="joingame()">Join Game</button>
+      <div id="status">server message</div>
+    </section>
+    <section id="canvas">
+
+    </section>
   </body>
   <script>
+    let socketNum = -1;
+    const writeLog = (msg) => {
+      document.querySelector("#console").textContent = msg;
+    }
     let socket = new WebSocket('ws://localhost:18080');
     socket.addEventListener("message", (event) => {
-      console.log(event.data);
+      writeLog(event.data);
+      const msg = JSON.parse(event.data);
+      switch (msg.message) {
+        case "Connected":
+          {
+            socketNum = msg.remarks;
+            break;
+          }
+        case "GAMEID":
+          {
+            document.querySelector("#status").textContent = `Your game id is ${msg.remarks}. Please wait for player to join.`
+          }
+        case "ROOM":
+          {
+            const data = JSON.parse(msg.remarks);
+            if (JSON.parse(data.games).length > 0) {
+              document.querySelector("#game-room").innerHTML = 
+              JSON.parse(data.games).map(i => `<option value="${i.gameId}">${i.player}'s game</option>`).join(",");
+            } else {
+              document.querySelector("#game-room").innerHTML = "<option value='' disabled>NO GAME</option>";
+            }
+            break;
+          }
+      }
     })
 
-    const send = () => {
+    socket.addEventListener("open", (event) => {
       socket.send(JSON.stringify({
-        "sender": "ME",
-        "message": "REQUESTBLOCK",
-        "remarks": ""
+        sender: "ME",
+        message: "GETID",
+        remarks: ""
       }));
+    })
+
+    const createMessage = (message, remarks) => {
+      return JSON.stringify({
+        sender: socketNum,
+        message: message,
+        remarks: remarks
+      });
+    }
+
+    const refresh = () => {
+      socket.send(createMessage("GETID", ""));
+    }
+
+    const newgame = () => {
+      socket.send(createMessage("NEWGAME", ""));
+    }
+
+    const joingame = () => {
+      socket.send(createMessage("JOINGAME", document.querySelector("#game-room").value));
     }
   </script>
 </html>

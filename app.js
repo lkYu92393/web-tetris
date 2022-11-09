@@ -1,7 +1,6 @@
 import { WebSocketServer } from 'ws';
 import Player from "./models/Player.js";
 import GameMessage from "./models/GameMessage.js";
-import Game from "./models/Game.js";
 
 const MAX_GAME = 100
 
@@ -13,8 +12,38 @@ const getRandomInt = (max) => {
     return Math.floor(Math.random() * max);
 }
 
+class Game {
+    constructor() {
+        this.gameId = Game.generateGameId();
+        this.player1 = null;
+        this.player2 = null;
+    }
+  
+    static generateGameId() {
+        while (true) {
+            let gameId = getRandomInt(3 * MAX_GAME);
+            if (!games.includes(gameId)) {
+                return gameId;
+            }
+        }
+    }
+  
+    static generateNextNBlocks(N) {
+        let nextN = []
+        for (let i = 0; i < N; ++i) {
+            nextN.push(getRandomInt(MAX_BLOCK_TYPES))
+        }
+        return nextN;
+    }
+  
+    AddPlayer(player) {
+        player.gameId = this.gameId
+        this.players.push(player)
+    }
+}
+
 wss.on('connection', function connection(ws) {
-    ws.send(new GameMessage("SERVER", "Connected").toString());
+    ws.send(new GameMessage("SERVER", "Connected", ws._socket.remotePort).toString());
     if (games.length >= MAX_GAME) {
         ws.send(new GameMessage("SERVER", "ERROR", "Server is currently full"))
         ws.close();
@@ -26,6 +55,17 @@ wss.on('connection', function connection(ws) {
         let msgObj = GameMessage.parseFromSocket(rawmsg)
 
         switch (msgObj.message) {
+            case "GETID":
+                {
+                    const msg = new GameMessage("SERVER", "ROOM", JSON.stringify({
+                        "games": JSON.stringify(
+                            games
+                            .filter(i => i.player2 == null)
+                            .map(i => { return ({ gameId: i.gameId, player: i.player1.playerId})}))
+                    })).toString();
+                    ws.send(msg);
+                    break;
+                }
             case "NEWGAME":
                 {
                     const newGame = new Game();
@@ -50,8 +90,10 @@ wss.on('connection', function connection(ws) {
                     ws.gameId = game.gameId;
                     const player2 = new Player(msgObj.sender, ws);
                     players.push(player2);
-                    game.AddPlayer(player2);
+                    game.player2 = player2;
                     ws.send(new GameMessage("SERVER", "JOINGAME", "OK").toString());
+                    game.player1.webSock.send(new GameMessage("SERVER", "START", "").toString());
+                    game.player2.webSock.send(new GameMessage("SERVER", "START", "").toString());
                     break;
                 }
             case "REQUESTSTART":
