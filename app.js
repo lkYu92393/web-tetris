@@ -162,11 +162,13 @@ ws.on('close', function close() {
         return;
     }
     //console.log(game)
-    for (let player of game.players) {
-        if (player.webSock !== ws) {
-            player.webSock.send(new GameMessage("SERVER", "GAMEOVER", "WON").toString());
-            player.webSock.close();
-        }
+    if (game.player1.webSock !== ws) {
+        game.player1.webSock.send(new GameMessage("SERVER", "GAMEOVER", "WON").toString());
+        game.player1.webSock.close();
+    }
+    if (game.player2.webSock !== ws) {
+        game.player2.webSock.send(new GameMessage("SERVER", "GAMEOVER", "WON").toString());
+        game.player2.webSock.close();
     }
 
     const index = games.indexOf(gameId);
