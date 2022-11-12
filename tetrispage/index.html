@@ -4,14 +4,31 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script type="importmap">
+    <!-- <script type="importmap">
         {
           "imports": {
             "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js"
           }
         }
-      </script>
+    </script> -->
     <style>
+        
+        * {
+        padding: 0;
+        margin: 0;
+        }
+
+        canvas {
+        background: #eee;
+        display: block;
+        margin: 0 auto;
+        }
+
+        div.container {
+        width: 600px;
+        margin: 10px auto;
+        }
+
         .hidden {
             display: none;
         }
@@ -22,93 +39,116 @@
     <div id="app">
         <div id="console"></div>
         <section id="panel">
-        <select id="game-room"></select>
-        <button onclick="refresh()">Refresh</button>
-        <button onclick="newgame()">New Game</button>
-        <button onclick="joingame()">Join Game</button>
-        <div id="status">server message</div>
+            <div id="game-select">
+                <select id="game-room">
+                </select>
+                <button onclick="refresh()">Refresh</button>
+                <button onclick="newgame()">New Game</button>
+                <button onclick="joingame()">Join Game</button>
+            </div>
+            <div id="status">server message</div>
         </section>
         <section id="canvas" class="hidden">
-            <h1>GAME</h1>
+            <canvas id="myCanvas" width="600" height="1000"></canvas>
         </section>
     </div>
   </body>
-  
-<script type="module">
-    import { createApp } from 'vue';
-  
-    createApp({
-      data() {
-        return {
-          message: 'Hello Vue!'
+
+    <script>
+        let gameId = -1;
+        let games = [];
+        let socketNum = -1;
+        const writeLog = (msg) => {
+        document.querySelector("#console").textContent = msg;
         }
-      }
-    }).mount('#app')
-  </script>
-  <script>
-    let socketNum = -1;
-    const writeLog = (msg) => {
-      document.querySelector("#console").textContent = msg;
-    }
-    let socket = new WebSocket('ws://localhost:18080');
-    socket.addEventListener("message", (event) => {
-      writeLog(event.data);
-      const msg = JSON.parse(event.data);
-      switch (msg.message) {
-        case "Connected":
-          {
-            socketNum = msg.remarks;
-            break;
-          }
-        case "GAMEID":
-          {
-            document.querySelector("#status").textContent = `Your game id is ${msg.remarks}. Please wait for player to join.`
-          }
-        case "ROOM":
-          {
-            const data = JSON.parse(msg.remarks);
-            if (JSON.parse(data.games).length > 0) {
-              document.querySelector("#game-room").innerHTML = 
-              JSON.parse(data.games).map(i => `<option value="${i.gameId}">${i.player}'s game</option>`).join(",");
-            } else {
-              document.querySelector("#game-room").innerHTML = "<option value='' disabled>NO GAME</option>";
-            }
-            break;
-          }
-        case "START":
+        let socket = new WebSocket('ws://localhost:18080');
+        socket.addEventListener("message", (event) => {
+        writeLog(event.data);
+        const msg = JSON.parse(event.data);
+        switch (msg.message) {
+            case "Connected":
             {
-                document.querySelector("#panel").classList.add("hidden");
-                document.querySelector("#canvas").classList.remove("hidden");
+                socketNum = msg.remarks;
+                break;
             }
-      }
-    })
+            case "GAMEID":
+            {
+                gameId = msg.remarks;
+                document.querySelector("#status").textContent = `Your game id is ${gameId}. Please wait for player to join.`;
+                document.querySelector("#game-select").classList.add("hidden");
+                break;
+            }
+            case "ROOM":
+            {
+                const data = JSON.parse(msg.remarks);
+                if (JSON.parse(data.games).length > 0) {
+                    games = JSON.parse(data.games);
+                    document.querySelector("#game-room").innerHTML = 
+                    JSON.parse(data.games).map(i => `<option value="${i.gameId}" ${i.gameId == gameId ? "disabled" : ""}>${i.player}'s game</option>`).join(",");
+                } else {
+                    document.querySelector("#game-room").innerHTML = "<option value='' disabled>NO GAME</option>";
+                }
+                break;
+            }
+            case "START":
+                {
+                    document.querySelector("#panel").classList.add("hidden");
+                    document.querySelector("#canvas").classList.remove("hidden");
+                }
+        }
+        })
 
-    socket.addEventListener("open", (event) => {
-      socket.send(JSON.stringify({
-        sender: "ME",
-        message: "GETID",
-        remarks: ""
-      }));
-    })
+        socket.addEventListener("open", (event) => {
+            socket.send(JSON.stringify({
+                sender: "ME",
+                message: "GETID",
+                remarks: ""
+            }));
+        })
 
-    const createMessage = (message, remarks) => {
-      return JSON.stringify({
-        sender: socketNum,
-        message: message,
-        remarks: remarks
-      });
-    }
+        const createMessage = (message, remarks) => {
+        return JSON.stringify({
+            sender: socketNum,
+            message: message,
+            remarks: remarks
+        });
+        }
 
-    const refresh = () => {
-      socket.send(createMessage("GETID", ""));
-    }
+        const refresh = () => {
+            socket.send(createMessage("GETID", ""));
+        }
 
-    const newgame = () => {
-      socket.send(createMessage("NEWGAME", ""));
-    }
+        const newgame = () => {
+            socket.send(createMessage("NEWGAME", ""));
+        }
 
-    const joingame = () => {
-      socket.send(createMessage("JOINGAME", document.querySelector("#game-room").value));
-    }
-  </script>
+        const joingame = () => {
+            socket.send(createMessage("JOINGAME", document.querySelector("#game-room").value));
+        }
+    </script>
+    <!-- <script type="module">
+        import { createApp } from 'vue';
+        
+        createApp({
+            data() {
+                return {
+                    game: 'Hello Vue!'
+                }
+            },
+            computed: {
+                // a computed getter
+                gamesOption() {
+                    // `this` points to the component instance
+                    return  games.length > 0
+                            ? "YES"
+                            : "NO"
+                }
+            },
+            methods: {
+                test() {
+                    console.log("TEST");
+                }
+            }
+        }).mount('#app');
+    </script> -->
 </html>

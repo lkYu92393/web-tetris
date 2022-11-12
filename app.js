@@ -68,6 +68,9 @@ wss.on('connection', function connection(ws) {
                 }
             case "NEWGAME":
                 {
+                    if (games.find(i => i.player1.webSock._socket.remotePort == ws._socket.remotePort)) {
+                        return;
+                    }
                     const newGame = new Game();
                     ws.gameId = newGame.gameId;
                     const player1 = new Player(msgObj.sender, ws);
@@ -128,11 +131,10 @@ wss.on('connection', function connection(ws) {
                       ws.send(new GameMessage("SERVER", "ERROR", "Game ID not found").toString())
                       return
                     }
-                    for (let player of game.players) {
-                      // don't send to yourself
-                      if (player.playerId != msgObj.sender) {
-                        player.webSock.send(new GameMessage("RIVAL", "TICK", msgObj.remarks).toString())
-                      }
+                    if (game.player1.playerId != msgObj.sender) {
+                        game.player1.webSock.send(new GameMessage("RIVAL", "TICK", msgObj.remarks).toString());
+                    } else {
+                        game.player2.webSock.send(new GameMessage("RIVAL", "TICK", msgObj.remarks).toString());
                     }
                     break;
                 }
@@ -151,35 +153,30 @@ wss.on('connection', function connection(ws) {
                     break;
                 }
         }
-  });
+    });
 
+    ws.on('close', function close() {
+        const gameId = ws.gameId;
+        const game = games.find(g => g.gameId == gameId); // DON'T use "===", it compares the true memory address
+        //console.log(ws.gameId)
+        if (!game) {
+            return;
+        }
+        //console.log(game)
+        // if (game.player1.webSock !== ws) {
+        //     game.player1.webSock.send(new GameMessage("SERVER", "GAMEOVER", "WON").toString());
+        //     game.player1.webSock.close();
+        // }
+        // if (game.player2.webSock !== ws) {
+        //     game.player2.webSock.send(new GameMessage("SERVER", "GAMEOVER", "WON").toString());
+        //     game.player2.webSock.close();
+        // }
 
-ws.on('close', function close() {
-    const gameId = ws.gameId;
-    const game = games.find(g => g.gameId == gameId); // DON'T use "===", it compares the true memory address
-    //console.log(ws.gameId)
-    if (!game) {
-        return;
-    }
-    //console.log(game)
-    if (game.player1.webSock !== ws) {
-        game.player1.webSock.send(new GameMessage("SERVER", "GAMEOVER", "WON").toString());
-        game.player1.webSock.close();
-    }
-    if (game.player2.webSock !== ws) {
-        game.player2.webSock.send(new GameMessage("SERVER", "GAMEOVER", "WON").toString());
-        game.player2.webSock.close();
-    }
-
-    const index = games.indexOf(gameId);
-    if (index > -1) {
-        games.splice(index, 1);
-    }
-
-})
-
-
-
+        const index = games.indexOf(gameId);
+        if (index > -1) {
+            games.splice(index, 1);
+        }
+    });
 });
 
 wss.broadcast = function broadcast(msg) {
