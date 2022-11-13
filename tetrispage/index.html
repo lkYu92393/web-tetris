@@ -59,59 +59,90 @@
         let games = [];
         let socketNum = -1;
         const writeLog = (msg) => {
-        document.querySelector("#console").textContent = msg;
+            // document.querySelector("#console").textContent = msg;
         }
         let socket = new WebSocket('ws://localhost:18080');
         socket.addEventListener("message", (event) => {
-        writeLog(event.data);
-        const msg = JSON.parse(event.data);
-        switch (msg.message) {
-            case "Connected":
-            {
-                socketNum = msg.remarks;
-                break;
-            }
-            case "GAMEID":
-            {
-                gameId = msg.remarks;
-                document.querySelector("#status").textContent = `Your game id is ${gameId}. Please wait for player to join.`;
-                document.querySelector("#game-select").classList.add("hidden");
-                break;
-            }
-            case "ROOM":
-            {
-                const data = JSON.parse(msg.remarks);
-                if (JSON.parse(data.games).length > 0) {
-                    games = JSON.parse(data.games);
-                    document.querySelector("#game-room").innerHTML = 
-                    JSON.parse(data.games).map(i => `<option value="${i.gameId}" ${i.gameId == gameId ? "disabled" : ""}>${i.player}'s game</option>`).join(",");
-                } else {
-                    document.querySelector("#game-room").innerHTML = "<option value='' disabled>NO GAME</option>";
+            writeLog(event.data);
+            const msg = JSON.parse(event.data);
+            switch (msg.message) {
+                case "Connected":
+                {
+                    socketNum = msg.remarks;
+                    break;
                 }
-                break;
-            }
-            case "START":
+                case "GAMEID":
+                {
+                    gameId = msg.remarks;
+                    document.querySelector("#status").textContent = `Your game id is ${gameId}. Please wait for player to join.`;
+                    document.querySelector("#game-select").classList.add("hidden");
+                    break;
+                }
+                case "ROOM":
+                {
+                    const data = JSON.parse(msg.remarks);
+                    if (JSON.parse(data.games).length > 0) {
+                        games = JSON.parse(data.games);
+                        document.querySelector("#game-room").innerHTML = 
+                        JSON.parse(data.games).map(i => `<option value="${i.gameId}" ${i.gameId == gameId ? "disabled" : ""}>${i.player}'s game</option>`).join(",");
+                    } else {
+                        document.querySelector("#game-room").innerHTML = "<option value='' disabled>NO GAME</option>";
+                    }
+                    break;
+                }
+                case "START":
                 {
                     document.querySelector("#panel").classList.add("hidden");
                     document.querySelector("#canvas").classList.remove("hidden");
+                    simulation = setInterval(tick, dt);
+                    frame.blockList = msg.remarks.split(',').map(i => parseInt(i));
+                    frame.block = getBlock(frame.blockList[frame.sequence]);
+                    frame.sequence++;
+                    break;
                 }
-        }
+                case "NEWBLOCK":
+                {
+                    let block = parseInt(msg.remarks);
+                    frame.blockList.push(block);
+                    break;
+                }
+                case "RIVALGRID":
+                {
+                    rivalFrame.gridList = JSON.parse(msg.remarks);
+                    break;
+                }
+                case "WIN":
+                {
+                    document.querySelector("#status").textContent = `You win.`;
+                    resetUI();
+                    frame = new Frame(10, 24);
+                    break;
+                }
+            }
         })
+
+        const createMessage = (message, remarks) => {
+            return JSON.stringify({
+                sender: socketNum,
+                message: message,
+                remarks: remarks
+            });
+        }
 
         socket.addEventListener("open", (event) => {
             socket.send(JSON.stringify({
-                sender: "ME",
+                sender: "",
                 message: "GETID",
                 remarks: ""
             }));
         })
 
-        const createMessage = (message, remarks) => {
-        return JSON.stringify({
-            sender: socketNum,
-            message: message,
-            remarks: remarks
-        });
+        const resetUI = () => {
+            clearInterval(simulation);
+            document.querySelector("#panel").classList.remove("hidden");
+            document.querySelector("#canvas").classList.add("hidden");
+            document.querySelector("#game-select").classList.remove("hidden");
+            refresh();
         }
 
         const refresh = () => {
@@ -125,6 +156,237 @@
         const joingame = () => {
             socket.send(createMessage("JOINGAME", document.querySelector("#game-room").value));
         }
+    </script>
+
+    <script>            
+        const canvas = document.getElementById("myCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const gridWidth = 10;
+        const gridHeight = 24;
+        const gridSize = 20;
+        const padding = 40;
+
+        const panelWidth = 200;
+        
+        canvas.width = 2 * gridWidth * gridSize + padding * 3;
+        canvas.height = gridHeight * gridSize + padding * 2;
+
+        let simulation = null;
+        const dt = 50;
+        let modulo = 5;
+        
+        const Blocks = [
+            [[0, 0], [0, 1], [1, 0], [1, 1]],
+            [[0, 0], [0, 1], [0, 2], [0, -1]],
+            [[0, 0], [1, 0], [0, -1], [1, 1]],
+            [[0, 0], [1, 0], [0, 1], [1, -1]],
+            [[0, 0], [1, 0], [-1, 0], [0, 1]],
+            [[0, 0], [1, 0], [0, 1], [0, 2]],
+            [[0, 0], [1, 0], [1, 1], [1, 2]]
+        ]
+
+        const getBlock = (num) => {
+            return Blocks[num];
+        }
+
+        const transformBlock = (block) => {
+            return block.map(point => [point[1], -point[0]]);
+        }
+
+        let upPressed = false;
+        let rightPressed = false;
+        let leftPressed = false;
+        document.addEventListener("keydown", keyDownHandler, false);
+        document.addEventListener("keyup", keyUpHandler, false);
+
+        function keyDownHandler(e) {
+        if (e.key == "Up" || e.key == "ArrowUp") {
+            upPressed = true;
+        } else if (e.key == "Down" || e.key == "ArrowDown") {
+            modulo = 1;
+        } else if (e.key == "Right" || e.key == "ArrowRight") {
+            rightPressed = true;
+        } else if (e.key == "Left" || e.key == "ArrowLeft") {
+            leftPressed = true;
+        }
+        }
+
+        function keyUpHandler(e) {
+            if (e.key == "Up" || e.key == "ArrowUp") {
+                upPressed = false;
+            } else if (e.key == "Down" || e.key == "ArrowDown") {
+                modulo = 5;
+            } else if (e.key == "Right" || e.key == "ArrowRight") {
+                rightPressed = false;
+            } else if (e.key == "Left" || e.key == "ArrowLeft") {
+                leftPressed = false;
+            }
+        }
+
+        const colorWhite = "#fff";
+        const colorGray = "#aaa";
+
+        const emptyGrid = (x, y) => {
+            let gridList = [];
+            for (let j = 0; j< y; j++) {
+                let tempArray = [];
+                for (let i = 0; i < x; i++) {
+                    tempArray.push({ color: colorWhite })
+                }
+                gridList.push(tempArray);
+            }
+            return gridList;
+        }
+
+        function Frame(x, y) {
+            this.x = x;
+            this.y = y;
+            this.sequence = 0;
+            this.blockList = [];
+            this.block = null;
+            this.coor = [Math.floor(this.x / 2), 0];
+            this.color = "#f00";
+
+            this.gridList = emptyGrid(this.x, this.y);
+        }
+
+        const drawSquare = (x, y, color) => {
+            ctx.beginPath();
+            ctx.rect(x, y, gridSize, gridSize);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        Frame.prototype.cleanAndRefill = function () {
+            this.block.forEach(point => {
+                this.gridList[this.coor[1] + point[1]][this.coor[0] + point[0]].color = colorGray;
+            });
+
+            let cleanCount = 0;
+            for (let j = this.y - 1; j >= 0; j--) {
+                if (this.gridList[j].every(i => i.color != colorWhite)) {
+                this.gridList.splice(j, 1);
+                cleanCount++;
+                }
+            }
+            for (let j = 0; j < cleanCount; j++) {
+                let tempArray = [];
+                for (let i = 0; i < this.x; i++) {
+                tempArray.push({ color: colorWhite});
+                }
+                this.gridList.unshift(tempArray);
+            }
+        }
+
+        Frame.prototype.draw = function() {
+            for (let i in this.block) {
+                if (this.block[i][1] + this.coor[1] > 23 || this.block[i][1] + this.coor[1] < 0) continue;
+                this.gridList[this.coor[1] + this.block[i][1]][this.coor[0] + this.block[i][0]].color = colorWhite;
+            }
+
+            if (upPressed) {
+                let tempBlock = transformBlock(this.block);
+                let hitStop = tempBlock.map(point => point[0] + this.coor[0] < 0 || point[0] + this.coor[0] > 9
+                                            || point[1] + this.coor[1] > 23 || point[1] + this.coor[1] < 0
+                                            || this.gridList[point[1] + this.coor[1]][point[0] + this.coor[0]].color == colorGray)
+                .reduce((a,b) => a || b);
+                if (!hitStop) {
+                    this.block = tempBlock;
+                }
+            }
+
+            if (leftPressed) {
+                let hitStop = this.block.map(point => point[0] + this.coor[0] == 0 || this.gridList[point[1] + this.coor[1]][point[0] + this.coor[0] - 1].color == colorGray)
+                .reduce((a,b) => a || b);
+                if (!hitStop) {
+                    this.coor[0]--;
+                }
+            }
+
+            if (rightPressed) {
+                let hitStop = this.block.map(point => point[0] + this.coor[0] == 9 || this.gridList[point[1] + this.coor[1]][point[0] + this.coor[0] + 1].color == colorGray)
+                .reduce((a,b) => a || b);
+                if (!hitStop) {
+                    this.coor[0]++;
+                }
+            }
+            if (drawCount % modulo == 0) {
+                this.coor = [this.coor[0], this.coor[1] + 1]
+            }
+            for (let i in this.block) {
+                if (this.block[i][1] + this.coor[1] > 23 || this.block[i][1] + this.coor[1] < 0) continue;
+                this.gridList[this.coor[1] + this.block[i][1]][this.coor[0] + this.block[i][0]].color = this.color;
+            }
+
+            for (let i = 0; i < this.x; i++) {
+                for (let j = 0; j < this.y; j++) {
+                    ctx.strokeRect(padding + i * gridSize, padding + j * gridSize, gridSize, gridSize);
+                    drawSquare(padding + i * gridSize, padding + j * gridSize, this.gridList[j][i].color);
+                }
+            }
+        }
+
+        Frame.prototype.rivalDraw = function() {
+            for (let i = 0; i < this.x; i++) {
+                for (let j = 0; j < this.y; j++) {
+                    ctx.strokeRect(2 * padding + 10 * gridSize + i * gridSize, 0 + padding + j * gridSize, gridSize, gridSize);
+                    drawSquare(2 * padding + 10 * gridSize +  i * gridSize, 0 + padding + j * gridSize, this.gridList[j][i].color);
+                }
+            }
+        }
+
+        Frame.prototype.resetFrame = function() {
+            this.gridList = emptyGrid(this.x , this.y);
+            this.block = null;
+            this.coor = [Math.floor(this.x / 2), 0];
+        }
+
+        Frame.prototype.checkCondition = function() {
+        
+            let hitStop = this.block.map(point => this.coor[1] + point[1] >= 23 || this.gridList[point[1] + this.coor[1] + 1][point[0] + this.coor[0]].color == colorGray).reduce((a,b) => a || b);
+            if (hitStop) {
+                if (this.coor[1] + this.block.map(a => a[1]).reduce((a,b)=> Math.min(a,b)) <= 1) {
+                    clearInterval(simulation);
+                    socket.send(createMessage("LOSE", ""));
+                    resetUI();
+                    frame = new Frame(10, 24);
+                    return;
+                }
+                this.cleanAndRefill();
+                this.block = getBlock(this.blockList[this.sequence]);
+                this.sequence++;
+                socket.send(createMessage("REQUESTBLOCK", this.sequence + 1));
+                this.coor = [Math.floor(this.x / 2), 0];
+            }
+        }
+        
+        let frame = new Frame(10, 24);
+        let rivalFrame = new Frame(10, 24);
+
+        let drawCount = 0;
+        let bottomReached = true;
+
+        const drawCurrentFrame = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawCount++;
+            frame.draw();
+            if (drawCount % modulo == 0) {
+                drawCount = 0;
+                socket.send(createMessage("REPORT", JSON.stringify(frame.gridList)));
+            }
+            frame.checkCondition();
+        };
+
+        const drawRivalFrame = () => {
+            rivalFrame.rivalDraw();
+        }
+        function tick() {
+            drawCurrentFrame();
+            drawRivalFrame();
+        };
     </script>
     <!-- <script type="module">
         import { createApp } from 'vue';

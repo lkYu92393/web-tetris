@@ -15,6 +15,7 @@ const getRandomInt = (max) => {
 class Game {
     constructor() {
         this.gameId = Game.generateGameId();
+        this.blockList = Game.generateList();
         this.player1 = null;
         this.player2 = null;
     }
@@ -28,17 +29,12 @@ class Game {
         }
     }
   
-    static generateNextNBlocks(N) {
-        let nextN = []
-        for (let i = 0; i < N; ++i) {
-            nextN.push(getRandomInt(MAX_BLOCK_TYPES))
+    static generateList() {
+        let list = [];
+        for (let i = 0; i < 10 ; i++) {
+            list.push(Math.floor(Math.random() * 7));
         }
-        return nextN;
-    }
-  
-    AddPlayer(player) {
-        player.gameId = this.gameId
-        this.players.push(player)
+        return list;
     }
 }
 
@@ -87,68 +83,68 @@ wss.on('connection', function connection(ws) {
                     const gameId = msgObj.remarks;
                     const game = games.find(g => g.gameId == gameId); // DON'T use "===", it compares the true memory address
                     if (!game) {
-                    ws.send(new GameMessage("SERVER", "ERROR", "Game ID not found").toString());
-                    return;
+                        ws.send(new GameMessage("SERVER", "ERROR", "Game ID not found").toString());
+                        return;
                     }
                     ws.gameId = game.gameId;
                     const player2 = new Player(msgObj.sender, ws);
                     players.push(player2);
                     game.player2 = player2;
                     ws.send(new GameMessage("SERVER", "JOINGAME", "OK").toString());
-                    game.player1.webSock.send(new GameMessage("SERVER", "START", "").toString());
-                    game.player2.webSock.send(new GameMessage("SERVER", "START", "").toString());
+
+                    game.player1.webSock.send(new GameMessage("SERVER", "START", `${game.blockList[0]},${game.blockList[1]},${game.blockList[2]}`).toString());
+                    game.player2.webSock.send(new GameMessage("SERVER", "START", `${game.blockList[0]},${game.blockList[1]},${game.blockList[2]}`).toString());
                     break;
                 }
-            case "REQUESTSTART":
+            case "LOSE":
                 {
-                    const gameId = msgObj.remarks
-                    const game = games.find(g => g.gameId == gameId) // DON'T use "===", it compares the true memory address
-                    if (!game) {
-                      ws.send(new GameMessage("SERVER", "ERROR", "Game ID not found").toString())
-                      console.log('game id not found');
-                      return
-                    }
-              
-                    //let next20Blocks = [0,1,2,3,4,5,6].concat(Game.generateNextNBlocks(20))
-                    let next20Blocks = Game.generateNextNBlocks(20)
-                    for (let player of game.players) {
-                      const msg = new GameMessage("SERVER", "GAMESTART", JSON.stringify(next20Blocks)).toString();
-                      player.webSock.send(msg)
-                      console.log('send: %s', msg);
-                    }
-                    break;
-                }
-            case "TICK":
-                {
-                    const player = players.find(p => p.playerId == msgObj.sender) // DON'T use "===", it compares the true memory address
-                    if (!player) {
-                      ws.send(new GameMessage("SERVER", "ERROR", "Player ID invalid").toString())
-                      return
-                    }
-                    const gameId = player.gameId
-                    const game = games.find(g => g.gameId == gameId) // DON'T use "===", it compares the true memory address
-                    if (!game) {
-                      ws.send(new GameMessage("SERVER", "ERROR", "Game ID not found").toString())
-                      return
-                    }
-                    if (game.player1.playerId != msgObj.sender) {
-                        game.player1.webSock.send(new GameMessage("RIVAL", "TICK", msgObj.remarks).toString());
+                    const game = games.find(g => g.player1.playerId == ws._socket.remotePort || g.player2.playerId == ws._socket.remotePort);
+                    if (game.player1.playerId == ws._socket.remotePort) {
+                        game.player2.webSock.send(new GameMessage("SERVER", "WIN", "").toString());
                     } else {
-                        game.player2.webSock.send(new GameMessage("RIVAL", "TICK", msgObj.remarks).toString());
+                        game.player1.webSock.send(new GameMessage("SERVER", "WIN", "").toString());
+                    }
+                    
+                    const gamePlayers = players.filter(p => p.playerId == game.player1.playerId || p.playerId == game.player2.playerId);
+                    for (let i in gamePlayers) {
+                        let index = players.indexOf(gamePlayers[i]);
+                        players.splice(index, 1);
+                    }
+                    
+                    let index = games.indexOf(game);
+                    if (index > -1) {
+                        games.splice(index, 1);
                     }
                     break;
                 }
             case "REQUESTBLOCK":
                 {
-                    const gameId = msgObj.remarks
-                    const game = games.find(g => g.gameId == gameId) // DON'T use "===", it compares the true memory address
+                    const sequence = msgObj.remarks;
+                    console.log(sequence);
+                    const game = games.find(g => g.player1.playerId == ws._socket.remotePort || g.player2.playerId == ws._socket.remotePort);
                     if (!game) {
-                    ws.send(new GameMessage("SERVER", "ERROR", "Game ID not found").toString())
+                        ws.send(new GameMessage("SERVER", "ERROR", "Game ID not found").toString());
+                        return;
                     }
-            
-                    let next10Blocks = Game.generateNextNBlocks(10)
-                    for (let player of game.players) {
-                    player.webSock.send(new GameMessage("SERVER", "NEWBLOCK", JSON.stringify(next10Blocks)).toString())
+                    
+                    if (game.blockList.length <= sequence + 5) {
+                        game.blockList.push(Math.floor(Math.random() * 7));
+                    }
+                    ws.send(new GameMessage("SERVER", "NEWBLOCK", String(game.blockList[sequence + 1])).toString());
+                    break;
+                }
+            case "REPORT":
+                {
+                    const gridList = msgObj.remarks;
+                    const game = games.find(g => g.player1.playerId == ws._socket.remotePort || g.player2.playerId == ws._socket.remotePort);
+                    if (!game) {
+                        ws.send(new GameMessage("SERVER", "ERROR", "Game ID not found").toString());
+                        return;
+                    }
+                    if (game.player1.playerId == ws._socket.remotePort) {
+                        game.player2.webSock.send(new GameMessage("SERVER", "RIVALGRID", gridList).toString());
+                    } else {
+                        game.player1.webSock.send(new GameMessage("SERVER", "RIVALGRID", gridList).toString());
                     }
                     break;
                 }
@@ -156,8 +152,7 @@ wss.on('connection', function connection(ws) {
     });
 
     ws.on('close', function close() {
-        const gameId = ws.gameId;
-        const game = games.find(g => g.gameId == gameId); // DON'T use "===", it compares the true memory address
+        const game = games.find(g => g.player1.playerId == ws._socket.remotePort || (g.player2 && g.player2.playerId == ws._socket.remotePort));
         //console.log(ws.gameId)
         if (!game) {
             return;
@@ -172,7 +167,7 @@ wss.on('connection', function connection(ws) {
         //     game.player2.webSock.close();
         // }
 
-        const index = games.indexOf(gameId);
+        const index = games.indexOf(game);
         if (index > -1) {
             games.splice(index, 1);
         }
