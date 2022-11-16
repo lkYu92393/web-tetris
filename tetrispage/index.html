@@ -29,6 +29,10 @@
         margin: 10px auto;
         }
 
+        section#panel {
+            margin: 20px;
+        }
+
         .hidden {
             display: none;
         }
@@ -59,7 +63,7 @@
         let games = [];
         let socketNum = -1;
         const writeLog = (msg) => {
-            // document.querySelector("#console").textContent = msg;
+            // document.querySelzector("#console").textContent = msg;
         }
         let socket = new WebSocket('ws://localhost:18080');
         socket.addEventListener("message", (event) => {
@@ -368,8 +372,17 @@
         let drawCount = 0;
         let bottomReached = true;
 
+        const writeLetter = () => {
+            ctx.fillStyle = "black";
+            ctx.font = "30px Arial";
+            ctx.fillText("Player", 50, 25);
+            ctx.fillText("Opponent", 280, 25);
+            ctx.fillStyle = "red";
+        }
+
         const drawCurrentFrame = () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            writeLetter();
 
             drawCount++;
             frame.draw();
