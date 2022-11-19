@@ -1,0 +1,1 @@
+This is a tetris game server with web app. Simply run 'npm install' to install the required package and 'node app.js' to start the server. Then start the webpage to play the game.
